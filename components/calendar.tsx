@@ -83,10 +83,10 @@ export function Calendar({ exercises, onDayClick }: CalendarProps) {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
+    <div className="bg-white rounded-lg shadow-md p-3 md:p-6">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-bold text-gray-800">
-          {format(currentDate, 'MMMM yyyy', { locale: ko })}
+          {format(currentDate, 'yyyy년 MMMM', { locale: ko })}
         </h2>
         <div className="flex gap-2">
           <button
@@ -131,11 +131,11 @@ export function Calendar({ exercises, onDayClick }: CalendarProps) {
       </div>
 
       {/* Weekday Headers */}
-      <div className="grid grid-cols-7 gap-2 mb-2">
+      <div className="grid grid-cols-7 gap-2 md:gap-2 mb-2">
         {['일', '월', '화', '수', '목', '금', '토'].map((day) => (
           <div
             key={day}
-            className="text-center font-semibold text-gray-600 text-sm h-8 flex items-center justify-center"
+            className="text-center font-semibold text-gray-600 text-xs md:text-sm h-10 md:h-8 flex items-center justify-center"
           >
             {day}
           </div>
@@ -143,7 +143,7 @@ export function Calendar({ exercises, onDayClick }: CalendarProps) {
       </div>
 
       {/* Calendar Grid */}
-      <div className="grid grid-cols-7 gap-2">
+      <div className="grid grid-cols-7 gap-1 md:gap-2">
         {days.map((day, idx) => {
           const isCurrentMonth = isSameMonth(day, monthStart);
           const isToday = isSameDay(day, new Date());
@@ -155,29 +155,35 @@ export function Calendar({ exercises, onDayClick }: CalendarProps) {
               key={idx}
               onClick={() => handleDayClick(day)}
               className={`
-                min-h-20 p-2 rounded-lg border-2 cursor-pointer transition-all
+                min-h-16 md:min-h-20 p-2 md:p-2 rounded-lg border-2 cursor-pointer transition-all flex flex-col
                 ${!isCurrentMonth ? 'bg-gray-50 border-gray-100' : 'border-gray-200'}
                 ${isToday ? 'ring-2 ring-blue-400 ring-offset-2' : ''}
                 ${hasExerciseToday ? 'bg-green-50 border-green-300 hover:bg-green-100' : 'bg-white hover:bg-gray-50'}
               `}
             >
               <div
-                className={`text-sm font-semibold mb-1 ${
-                  isCurrentMonth ? 'text-gray-800' : 'text-gray-400'
-                } ${isToday ? 'text-blue-600' : ''}`}
+                className={`text-base md:text-sm font-semibold ${
+                  isCurrentMonth ? (
+                    day.getDay() === 0 ? 'text-red-600' :
+                    day.getDay() === 6 ? 'text-blue-600' :
+                    isToday ? 'text-blue-600' :
+                    'text-gray-800'
+                  ) : (
+                    day.getDay() === 0 ? 'text-red-300' :
+                    day.getDay() === 6 ? 'text-blue-300' :
+                    'text-gray-400'
+                  )
+                }`}
               >
                 {format(day, 'd')}
               </div>
 
               {/* Exercise indicator */}
               {hasExerciseToday && dayExercises.length > 0 && (
-                <div className="text-xs">
-                  <div className="flex items-center gap-1 text-green-700 font-medium">
+                <div className="flex-1 flex items-center justify-center">
+                  <div className="flex items-center gap-1 text-green-700 font-medium text-xs md:text-xs">
                     <span className="inline-block w-2 h-2 bg-green-500 rounded-full"></span>
-                    {dayExercises.length}개
-                  </div>
-                  <div className="text-xs text-green-600 mt-1">
-                    {dayExercises.reduce((sum, ex) => sum + ex.duration, 0)}분
+                    {dayExercises.reduce((sum, ex) => sum + ex.duration, 0)}<span className="hidden md:inline">분</span>
                   </div>
                 </div>
               )}
@@ -194,7 +200,7 @@ export function Calendar({ exercises, onDayClick }: CalendarProps) {
         </div>
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 bg-white border-2 border-gray-200 rounded"></div>
-          <span>운동 없음</span>
+          <span>운동 안함</span>
         </div>
       </div>
     </div>

@@ -11,6 +11,7 @@ import {
   subWeeks,
   addWeeks,
 } from 'date-fns';
+import { ko } from 'date-fns/locale';
 
 export async function GET(req: NextRequest) {
   try {
@@ -66,13 +67,13 @@ export async function GET(req: NextRequest) {
         (ex) => format(ex.date, 'yyyy-MM-dd') === dateStr
       );
 
-      const count = dayExercises.length;
+      const count = dayExercises.length > 0 ? 1 : 0;
       const minutes = dayExercises.reduce((sum, ex) => sum + ex.duration, 0);
 
       return {
         date: dateStr,
         displayDate: format(day, 'd'),
-        dayOfWeek: format(day, 'EEEE', { locale: require('date-fns/locale/ko') }),
+        dayOfWeek: format(day, 'EEEE', { locale: ko }),
         count,
         minutes,
       };

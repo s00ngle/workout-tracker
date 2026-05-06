@@ -29,7 +29,6 @@ export function LoginFormInner({
   const searchParams = useSearchParams();
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Check if redirected from registration
   useEffect(() => {
     const successParam = searchParams.get('success');
     if (successParam === 'registered') {
@@ -38,27 +37,51 @@ export function LoginFormInner({
   }, [searchParams]);
 
   return (
-    <div className="bg-white rounded-lg shadow-lg p-8">
-      <h1 className="text-2xl font-bold text-gray-800 mb-6 text-center">로그인</h1>
+    <div
+      className="rounded-3xl p-12 max-w-md mx-auto bg-white"
+      style={{
+        boxShadow: 'var(--shadow-lg)',
+        border: '1px solid var(--border)'
+      }}
+    >
+      <div className="mb-10">
+        <h1 className="text-4xl font-bold mb-2" style={{ color: 'var(--foreground)' }}>
+          로그인
+        </h1>
+        <p className="text-base" style={{ color: 'var(--text-secondary)' }}>
+          계정에 접속하세요
+        </p>
+      </div>
 
-      {/* 에러 메시지 */}
       {externalError && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md">
-          <p className="text-red-700 text-sm">{externalError}</p>
+        <div
+          className="mb-6 p-4 rounded-2xl text-sm font-medium"
+          style={{
+            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+            color: 'var(--error)',
+            border: '1px solid rgba(239, 68, 68, 0.2)'
+          }}
+        >
+          {externalError}
         </div>
       )}
 
-      {/* 성공 메시지 */}
       {success && (
-        <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-md">
-          <p className="text-green-700 text-sm">{success}</p>
+        <div
+          className="mb-6 p-4 rounded-2xl text-sm font-medium"
+          style={{
+            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+            color: 'var(--success)',
+            border: '1px solid rgba(16, 185, 129, 0.2)'
+          }}
+        >
+          {success}
         </div>
       )}
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        {/* 이메일 입력 */}
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-semibold mb-2.5" style={{ color: 'var(--text-primary)' }}>
             이메일
           </label>
           <input
@@ -70,18 +93,23 @@ export function LoginFormInner({
                 message: '올바른 이메일 형식을 입력해주세요',
               },
             })}
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+            className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 transition-all bg-var(--gray-50)"
+            style={{
+              borderColor: 'var(--border)',
+              backgroundColor: 'var(--gray-50)'
+            }}
             placeholder="your@email.com"
             disabled={isLoading}
           />
           {errors.email && (
-            <p className="text-red-500 text-sm mt-1">{errors.email.message}</p>
+            <p className="text-sm mt-2" style={{ color: 'var(--error)' }}>
+              {errors.email.message}
+            </p>
           )}
         </div>
 
-        {/* 비밀번호 입력 */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-semibold mb-2.5" style={{ color: 'var(--text-primary)' }}>
             비밀번호
           </label>
           <input
@@ -89,29 +117,36 @@ export function LoginFormInner({
             {...register('password', {
               required: '비밀번호를 입력해주세요',
             })}
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+            className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 transition-all"
+            style={{
+              borderColor: 'var(--border)',
+              backgroundColor: 'var(--gray-50)'
+            }}
             placeholder="Password123"
             disabled={isLoading}
           />
           {errors.password && (
-            <p className="text-red-500 text-sm mt-1">{errors.password.message}</p>
+            <p className="text-sm mt-2" style={{ color: 'var(--error)' }}>
+              {errors.password.message}
+            </p>
           )}
         </div>
 
-        {/* 로그인 버튼 */}
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full py-2 bg-blue-500 text-white font-semibold rounded-md hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors mt-6"
+          className="w-full py-3.5 font-semibold rounded-xl transition-all duration-200 text-white mt-8 hover:shadow-lg active:scale-95 disabled:opacity-60"
+          style={{
+            backgroundColor: 'var(--primary)'
+          }}
         >
           {isLoading ? '로그인 중...' : '로그인'}
         </button>
       </form>
 
-      {/* 회원가입 링크 */}
-      <p className="text-center text-sm text-gray-600 mt-6">
+      <p className="text-center text-sm mt-8" style={{ color: 'var(--text-secondary)' }}>
         계정이 없으신가요?{' '}
-        <a href="/register" className="text-blue-500 hover:text-blue-600 font-semibold">
+        <a href="/register" className="font-semibold hover:text-blue-600 transition-colors" style={{ color: 'var(--primary)' }}>
           회원가입
         </a>
       </p>

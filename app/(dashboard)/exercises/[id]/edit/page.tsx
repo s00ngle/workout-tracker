@@ -1,69 +1,127 @@
-import { getServerSession } from 'next-auth/next';
-import { redirect } from 'next/navigation';
-import { authOptions } from '@/lib/auth';
-import { db } from '@/lib/db';
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useSession } from 'next-auth/react';
+import { useRouter, useParams } from 'next/navigation';
 import { ExerciseForm } from '@/components/exercise-form';
 import { format } from 'date-fns';
 
-export const dynamic = 'force-dynamic';
+interface Exercise {
+  id: number;
+  date: string;
+  type: string;
+  duration: number;
+  intensity: string;
+}
 
-async function getExercise(id: number, userId: number) {
-  const exercise = await db.exercise.findUnique({
-    where: { id },
-  });
+export default function EditExercisePage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const params = useParams();
+  const exerciseId = parseInt(params.id as string, 10);
+  const [loading, setLoading] = useState(true);
+  const [exercise, setExercise] = useState<Exercise | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  if (!exercise || exercise.userId !== userId) {
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/login');
+      return;
+    }
+
+    if (status !== 'authenticated') return;
+
+    const fetchExercise = async () => {
+      try {
+        const res = await fetch(`/api/exercises`);
+        if (res.ok) {
+          const exercises = await res.json();
+          const found = exercises.find((ex: Exercise) => ex.id === exerciseId);
+          if (found) {
+            setExercise({
+              ...found,
+              date: format(new Date(found.date), 'yyyy-MM-dd'),
+            });
+          } else {
+            setError('운동 기록을 찾을 수 없습니다');
+          }
+        }
+      } catch (err) {
+        setError('운동 기록을 불러올 수 없습니다');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchExercise();
+  }, [status, router, exerciseId]);
+
+  if (loading) {
+    return <div className="p-6">로딩 중...</div>;
+  }
+
+  if (!session) {
     return null;
   }
 
-  return exercise;
-}
-
-export default async function EditExercisePage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const session = await getServerSession(authOptions);
-
-  if (!session?.user?.id) {
-    redirect('/login');
+  if (error) {
+    return (
+      <div className="p-6">
+        <div
+          className="rounded-2xl p-4"
+          style={{
+            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+            border: '1px solid rgba(239, 68, 68, 0.2)',
+            color: 'var(--error)'
+          }}
+        >
+          {error}
+        </div>
+      </div>
+    );
   }
-
-  const userId = parseInt(session.user.id, 10);
-  const { id } = await params;
-  const exerciseId = parseInt(id, 10);
-
-  const exercise = await getExercise(exerciseId, userId);
 
   if (!exercise) {
-    redirect('/exercises');
+    return (
+      <div className="p-6">
+        <div
+          className="rounded-2xl p-4"
+          style={{
+            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+            border: '1px solid rgba(245, 158, 11, 0.2)',
+            color: 'var(--warning)'
+          }}
+        >
+          운동 기록을 찾을 수 없습니다
+        </div>
+      </div>
+    );
   }
 
-  const initialData = {
-    date: format(
-      exercise.date instanceof Date ? exercise.date : new Date(exercise.date),
-      'yyyy-MM-dd'
-    ),
-    type: exercise.type,
-    duration: exercise.duration,
-    intensity: exercise.intensity,
-  };
-
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="space-y-10">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">운동 기록 수정</h1>
-        <p className="mt-1 text-gray-600">운동 기록을 수정하세요</p>
+        <h1 className="text-4xl font-bold tracking-tight" style={{ color: 'var(--foreground)' }}>
+          운동 수정
+        </h1>
+        <p className="text-base mt-3" style={{ color: 'var(--text-secondary)' }}>
+          운동 기록을 수정하세요
+        </p>
       </div>
 
-      {/* Form Container */}
-      <div className="bg-white rounded-lg shadow p-6 max-w-md">
+      <div
+        className="rounded-2xl p-8 border"
+        style={{
+          backgroundColor: 'white',
+          borderColor: 'var(--border)',
+          boxShadow: 'var(--shadow-md)'
+        }}
+      >
         <ExerciseForm
           mode="edit"
           exerciseId={exerciseId}
-          initialData={initialData}
+          initialData={exercise}
         />
       </div>
     </div>

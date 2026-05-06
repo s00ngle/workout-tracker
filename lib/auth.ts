@@ -1,9 +1,10 @@
-import { NextAuthOptions } from 'next-auth';
+import NextAuth from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { db } from './db';
 import bcrypt from 'bcryptjs';
 
-export const authOptions: NextAuthOptions = {
+export const authOptions = {
+  trustHost: true,
   providers: [
     CredentialsProvider({
       name: 'Credentials',
@@ -42,13 +43,13 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user }: any) {
       if (user) {
         token.id = user.id;
       }
       return token;
     },
-    async session({ session, token }) {
+    async session({ session, token }: any) {
       if (session.user) {
         session.user.id = token.id as string;
       }
@@ -60,6 +61,8 @@ export const authOptions: NextAuthOptions = {
   },
   session: {
     strategy: 'jwt',
-    maxAge: 30 * 24 * 60 * 60, // 30 days
+    maxAge: 30 * 24 * 60 * 60,
   },
 };
+
+export const { auth, handlers } = NextAuth(authOptions);

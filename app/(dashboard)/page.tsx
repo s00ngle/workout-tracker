@@ -1,302 +1,167 @@
-import { getSession } from 'next-auth/react';
-import { redirect } from 'next/navigation';
-import { db } from '@/lib/db';
-import { Calendar } from '@/components/calendar';
-import {
-  startOfWeek,
-  endOfWeek,
-  startOfMonth,
-  endOfMonth,
-  parseISO,
-  format,
-  isToday,
-} from 'date-fns';
-import Link from 'next/link';
+'use client';
 
-export const dynamic = 'force-dynamic';
+import { useEffect, useState } from 'react';
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { Calendar } from '@/components/calendar';
 
 interface Exercise {
   id: number;
-  date: Date | string;
+  date: string;
   type: string;
   duration: number;
   intensity: string;
-  userId: number;
-  createdAt: Date;
-  updatedAt: Date;
 }
 
-async function getDashboardData(userId: number) {
-  const now = new Date();
-  const weekStart = startOfWeek(now);
-  const weekEnd = endOfWeek(now);
-  const monthStart = startOfMonth(now);
-  const monthEnd = endOfMonth(now);
+export default function DashboardPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [thisWeekCount, setThisWeekCount] = useState(0);
+  const [thisWeekMinutes, setThisWeekMinutes] = useState(0);
+  const [weeklyGoal, setWeeklyGoal] = useState(3);
+  const [weeklyMinutesGoal, setWeeklyMinutesGoal] = useState(30);
+  const [loading, setLoading] = useState(true);
 
-  // Fetch all exercises for the month (for calendar)
-  const monthExercises = await db.exercise.findMany({
-    where: {
-      userId,
-      date: {
-        gte: monthStart,
-        lte: monthEnd,
-      },
-    },
-    orderBy: {
-      date: 'desc',
-    },
-  });
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/login');
+      return;
+    }
 
-  // Fetch this week's exercises
-  const weekExercises = await db.exercise.findMany({
-    where: {
-      userId,
-      date: {
-        gte: weekStart,
-        lte: weekEnd,
-      },
-    },
-    orderBy: {
-      date: 'desc',
-    },
-  });
+    if (status !== 'authenticated') return;
 
-  // Fetch today's exercises
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
+    const fetchData = async () => {
+      try {
+        const [exercisesRes, goalsRes] = await Promise.all([
+          fetch('/api/exercises'),
+          fetch('/api/goals'),
+        ]);
 
-  const todayExercises = await db.exercise.findMany({
-    where: {
-      userId,
-      date: {
-        gte: today,
-        lt: tomorrow,
-      },
-    },
-  });
+        if (exercisesRes.ok) {
+          const exData = await exercisesRes.json();
+          setExercises(exData || []);
 
-  // Get user's goal
-  const goal = await db.goal.findUnique({
-    where: { userId },
-  });
+          // Calculate this week stats
+          const now = new Date();
+          const weekStart = new Date(now);
+          weekStart.setDate(now.getDate() - now.getDay());
+          weekStart.setHours(0, 0, 0, 0);
 
-  return {
-    monthExercises,
-    weekExercises,
-    todayExercises,
-    goal,
-  };
-}
+          const weekExercises = exData.filter((ex: Exercise) => {
+            const exDate = new Date(ex.date);
+            return exDate >= weekStart && exDate <= now;
+          });
 
-function calculateStats(exercises: Exercise[]) {
-  const totalExercises = exercises.length;
-  const totalMinutes = exercises.reduce((sum, ex) => sum + ex.duration, 0);
-  const uniqueDays = new Set(
-    exercises.map((ex) => {
-      const date = typeof ex.date === 'string' ? parseISO(ex.date) : ex.date;
-      return format(date, 'yyyy-MM-dd');
-    })
-  ).size;
+          // Count unique days with exercises (multiple exercises on same day = 1)
+          const uniqueDays = new Set(
+            weekExercises.map((ex: Exercise) => {
+              const exDate = new Date(ex.date);
+              return exDate.toDateString();
+            })
+          );
 
-  return {
-    totalExercises,
-    totalMinutes,
-    uniqueDays,
-  };
-}
+          setThisWeekCount(uniqueDays.size);
+          setThisWeekMinutes(weekExercises.reduce((sum: number, ex: Exercise) => sum + ex.duration, 0));
+        }
 
-export default async function DashboardPage() {
-  const session = await getSession();
+        if (goalsRes.ok) {
+          const goalData = await goalsRes.json();
+          if (goalData) {
+            setWeeklyGoal(goalData.weeklyTarget || 3);
+            setWeeklyMinutesGoal(goalData.weeklyMinutes || 30);
+          }
+        }
+      } catch (err) {
+        console.error('데이터 조회 실패:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  if (!session?.user?.id) {
-    redirect('/login');
+    fetchData();
+  }, [status, router]);
+
+  if (loading) {
+    return <div className="p-6">로딩 중...</div>;
   }
 
-  const userId = parseInt(session.user.id);
-  const { monthExercises, weekExercises, todayExercises, goal } =
-    await getDashboardData(userId);
-
-  const weekStats = calculateStats(weekExercises);
-  const monthStats = calculateStats(monthExercises);
-  const todayStats = calculateStats(todayExercises);
-
-  const weekGoal = goal?.weeklyTarget || 3;
-  const weekGoalMinutes = goal?.weeklyMinutes || 150;
-  const monthGoal = goal?.monthlyTarget || 12;
-  const monthGoalMinutes = goal?.monthlyMinutes || 600;
+  if (!session) {
+    return null;
+  }
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-800">대시보드</h1>
-          <p className="text-gray-600 mt-1">반갑습니다! 오늘 운동을 시작해보세요.</p>
-        </div>
-        <Link
-          href="/exercises/new"
-          className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-medium transition-colors flex items-center gap-2"
-        >
-          <svg
-            className="w-5 h-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 4v16m8-8H4"
-            />
-          </svg>
-          빠른 추가
-        </Link>
+    <div className="space-y-10">
+      <div>
+        <h1 className="text-4xl font-bold tracking-tight" style={{ color: 'var(--foreground)' }}>
+          대시보드
+        </h1>
+        <p className="text-base mt-3" style={{ color: 'var(--text-secondary)' }}>
+          안녕하세요, {session.user?.name}님! 오늘의 운동 진행 상황을 확인하세요.
+        </p>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Today's Status */}
-        <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500">
-          <h3 className="text-sm font-semibold text-gray-600 mb-2">오늘의 운동</h3>
-          <div className="text-3xl font-bold text-gray-800 mb-2">
-            {todayStats.totalExercises}
-          </div>
-          <p className="text-sm text-gray-600">
-            {todayStats.totalMinutes > 0
-              ? `${todayStats.totalMinutes}분 운동함`
-              : '아직 운동하지 않음'}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div
+          className="rounded-2xl p-8 border transition-all hover:shadow-lg hover:-translate-y-1 duration-200"
+          style={{
+            backgroundColor: 'white',
+            borderColor: 'var(--border)',
+            boxShadow: 'var(--shadow-md)'
+          }}
+        >
+          <h2 className="text-sm font-semibold tracking-wide" style={{ color: 'var(--text-secondary)' }}>
+            이번 주 운동
+          </h2>
+          <p className="text-5xl font-bold mt-4 tracking-tight" style={{ color: 'var(--primary)' }}>
+            {thisWeekCount}
           </p>
-          {todayStats.totalExercises === 0 && (
-            <Link
-              href="/exercises/new"
-              className="text-sm text-blue-500 hover:text-blue-600 font-medium mt-3 inline-block"
-            >
-              지금 추가하기 →
-            </Link>
-          )}
+          <p className="text-xs mt-2" style={{ color: 'var(--text-tertiary)' }}>
+            목표: {weeklyGoal}회
+          </p>
         </div>
 
-        {/* This Week */}
-        <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500">
-          <h3 className="text-sm font-semibold text-gray-600 mb-2">이번 주</h3>
-          <div className="text-3xl font-bold text-gray-800 mb-1">
-            {weekStats.uniqueDays}/{weekGoal}
-          </div>
-          <div className="text-xs text-gray-600">
-            {weekStats.totalMinutes}/{weekGoalMinutes}분
-          </div>
-          <div className="mt-3 bg-gray-200 rounded-full h-2">
-            <div
-              className="bg-green-500 h-2 rounded-full transition-all"
-              style={{
-                width: `${Math.min((weekStats.uniqueDays / weekGoal) * 100, 100)}%`,
-              }}
-            ></div>
-          </div>
+        <div
+          className="rounded-2xl p-8 border transition-all hover:shadow-lg hover:-translate-y-1 duration-200"
+          style={{
+            backgroundColor: 'white',
+            borderColor: 'var(--border)',
+            boxShadow: 'var(--shadow-md)'
+          }}
+        >
+          <h2 className="text-sm font-semibold tracking-wide" style={{ color: 'var(--text-secondary)' }}>
+            이번 주 운동 시간
+          </h2>
+          <p className="text-5xl font-bold mt-4 tracking-tight" style={{ color: 'var(--success)' }}>
+            {thisWeekMinutes}
+          </p>
+          <p className="text-xs mt-2" style={{ color: 'var(--text-tertiary)' }}>
+            목표: {weeklyMinutesGoal}분
+          </p>
         </div>
 
-        {/* This Month */}
-        <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-purple-500">
-          <h3 className="text-sm font-semibold text-gray-600 mb-2">이번 달</h3>
-          <div className="text-3xl font-bold text-gray-800 mb-1">
-            {monthStats.uniqueDays}/{monthGoal || '목표 미설정'}
-          </div>
-          <div className="text-xs text-gray-600">
-            {monthStats.totalMinutes}/{monthGoalMinutes || '목표 미설정'}분
-          </div>
-          {monthGoal && (
-            <div className="mt-3 bg-gray-200 rounded-full h-2">
-              <div
-                className="bg-purple-500 h-2 rounded-full transition-all"
-                style={{
-                  width: `${Math.min((monthStats.uniqueDays / monthGoal) * 100, 100)}%`,
-                }}
-              ></div>
-            </div>
-          )}
-        </div>
-
-        {/* Goal Status */}
-        <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-orange-500">
-          <h3 className="text-sm font-semibold text-gray-600 mb-2">이번 달 목표</h3>
-          <div className="text-lg font-bold text-gray-800 mb-1">
-            {goal ? `${goal.weeklyTarget}회/주` : '미설정'}
-          </div>
-          <div className="text-xs text-gray-600">
-            {goal ? `${goal.weeklyMinutes}분/주` : '목표를 설정하세요'}
-          </div>
-          <Link
-            href="/settings/goals"
-            className="text-sm text-orange-500 hover:text-orange-600 font-medium mt-3 inline-block"
-          >
-            목표 설정 →
-          </Link>
-        </div>
+        <Link
+          href="/exercises/new"
+          className="rounded-2xl p-8 border transition-all hover:shadow-lg hover:-translate-y-1 active:scale-95 duration-200 flex flex-col items-center justify-center cursor-pointer"
+          style={{
+            backgroundColor: 'var(--primary)',
+            borderColor: 'var(--primary)',
+            color: 'white',
+            boxShadow: 'var(--shadow-md)'
+          }}
+        >
+          <span className="text-3xl mb-2">➕</span>
+          <h2 className="text-sm font-semibold">운동 추가</h2>
+          <p className="text-xs mt-2" style={{ color: 'rgba(255, 255, 255, 0.8)' }}>
+            새로운 운동 기록하기
+          </p>
+        </Link>
       </div>
 
-      {/* Main Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Calendar */}
-        <div className="lg:col-span-2">
-          <Calendar
-            exercises={monthExercises.map((ex) => ({
-              ...ex,
-              date: ex.date instanceof Date ? ex.date.toISOString() : String(ex.date),
-            }))}
-          />
-        </div>
-
-        {/* Recent Exercises */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">최근 운동</h2>
-
-          {weekExercises.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-gray-600 mb-4">최근 운동이 없습니다</p>
-              <Link
-                href="/exercises/new"
-                className="text-blue-500 hover:text-blue-600 font-medium"
-              >
-                운동 기록하기
-              </Link>
-            </div>
-          ) : (
-            <div className="space-y-3 max-h-96 overflow-y-auto">
-              {weekExercises.map((exercise) => {
-                const date = parseISO(exercise.date instanceof Date ? exercise.date.toISOString() : String(exercise.date));
-                return (
-                  <div
-                    key={exercise.id}
-                    className="p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors"
-                  >
-                    <div className="flex items-start justify-between mb-1">
-                      <div className="font-medium text-gray-800">{exercise.type}</div>
-                      <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full">
-                        {exercise.intensity === 'high'
-                          ? '고강도'
-                          : exercise.intensity === 'medium'
-                            ? '중강도'
-                            : '저강도'}
-                      </span>
-                    </div>
-                    <div className="text-sm text-gray-600 mb-1">
-                      {exercise.duration}분
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {format(date, 'M월 d일 (EEEE)', {
-                        locale: require('date-fns/locale/ko'),
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
+      {/* Calendar */}
+      <Calendar exercises={exercises} />
     </div>
   );
 }

@@ -1,442 +1,282 @@
-import { getSession } from 'next-auth/react';
-import { redirect } from 'next/navigation';
-import { StatisticsChart } from '@/components/statistics-chart';
-import {
-  format,
-  startOfWeek,
-  endOfWeek,
-  startOfMonth,
-  endOfMonth,
-  subWeeks,
-  addWeeks,
-  subMonths,
-  addMonths,
-} from 'date-fns';
-import { ko } from 'date-fns/locale';
-import Link from 'next/link';
+'use client';
 
-export const dynamic = 'force-dynamic';
+import { useEffect, useState } from 'react';
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import {
+  BarChart,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Bar,
+  ResponsiveContainer,
+} from 'recharts';
 
 interface DailyStats {
   date: string;
-  displayDate?: string;
-  dayOfWeek?: string;
   count: number;
   minutes: number;
 }
 
-interface WeeklyResponse {
-  weekStart: string;
-  weekEnd: string;
-  dailyStats: DailyStats[];
-  weeklyStats: {
-    totalExercises: number;
-    totalMinutes: number;
-    daysWithExercises: number;
-  };
-  weeklyGoal: {
-    target: number;
-    targetMinutes: number;
-    completed: number;
-    completedMinutes: number;
-  };
-  achievementPercentage: number;
+interface StatisticsData {
+  weeklyStats: DailyStats[];
+  monthlyStats: DailyStats[];
+  weeklyGoal: number;
+  weeklyMinutesGoal: number;
 }
 
-interface MonthlyResponse {
-  monthStart: string;
-  monthEnd: string;
-  dailyStats: DailyStats[];
-  monthlyStats: {
-    totalExercises: number;
-    totalMinutes: number;
-    daysWithExercises: number;
-  };
-  monthlyGoal: {
-    target: number;
-    targetMinutes: number;
-    completed: number;
-    completedMinutes: number;
-  } | null;
-  achievementPercentage: number;
-}
+export default function StatisticsPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const [data, setData] = useState<StatisticsData | null>(null);
+  const [loading, setLoading] = useState(true);
 
-async function getWeeklyStats(startDate?: string) {
-  const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
-  const params = new URLSearchParams();
-  if (startDate) {
-    params.append('startDate', startDate);
-  }
-
-  try {
-    const response = await fetch(
-      `${baseUrl}/api/statistics/weekly?${params.toString()}`,
-      {
-        cache: 'no-store',
-        headers: {
-          Cookie: `next-auth.session-token=${process.env.SESSION_TOKEN || ''}`,
-        },
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch weekly stats');
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/login');
+      return;
     }
 
-    return (await response.json()) as WeeklyResponse;
-  } catch (error) {
-    console.error('[WEEKLY_STATS_ERROR]', error);
-    return null;
-  }
-}
+    if (status !== 'authenticated') return;
 
-async function getMonthlyStats(startDate?: string) {
-  const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
-  const params = new URLSearchParams();
-  if (startDate) {
-    params.append('startDate', startDate);
-  }
+    const fetchData = async () => {
+      try {
+        const [weeklyRes, monthlyRes, goalsRes] = await Promise.all([
+          fetch('/api/statistics/weekly'),
+          fetch('/api/statistics/monthly'),
+          fetch('/api/goals'),
+        ]);
 
-  try {
-    const response = await fetch(
-      `${baseUrl}/api/statistics/monthly?${params.toString()}`,
-      {
-        cache: 'no-store',
-        headers: {
-          Cookie: `next-auth.session-token=${process.env.SESSION_TOKEN || ''}`,
-        },
+        let weeklyStats = [];
+        let monthlyStats = [];
+        let weeklyGoal = 3;
+        let weeklyMinutesGoal = 30;
+
+        if (weeklyRes.ok) {
+          const weekData = await weeklyRes.json();
+          weeklyStats = weekData.dailyStats || [];
+          weeklyGoal = weekData.weeklyGoal?.target || 3;
+          weeklyMinutesGoal = weekData.weeklyGoal?.targetMinutes || 30;
+        }
+
+        if (monthlyRes.ok) {
+          const monthData = await monthlyRes.json();
+          monthlyStats = monthData.dailyStats || [];
+        }
+
+        if (goalsRes.ok) {
+          const goalData = await goalsRes.json();
+          if (goalData) {
+            weeklyGoal = goalData.weeklyTarget || weeklyGoal;
+            weeklyMinutesGoal = goalData.weeklyMinutes || weeklyMinutesGoal;
+          }
+        }
+
+        setData({
+          weeklyStats,
+          monthlyStats,
+          weeklyGoal,
+          weeklyMinutesGoal,
+        });
+      } catch (err) {
+        console.error('통계 조회 실패:', err);
+        setData({
+          weeklyStats: [],
+          monthlyStats: [],
+          weeklyGoal: 3,
+          weeklyMinutesGoal: 30,
+        });
+      } finally {
+        setLoading(false);
       }
-    );
+    };
 
-    if (!response.ok) {
-      throw new Error('Failed to fetch monthly stats');
-    }
+    fetchData();
+  }, [status, router]);
 
-    return (await response.json()) as MonthlyResponse;
-  } catch (error) {
-    console.error('[MONTHLY_STATS_ERROR]', error);
+  if (loading) {
+    return <div className="p-6">로딩 중...</div>;
+  }
+
+  if (!session || !data) {
     return null;
   }
-}
-
-export default async function StatisticsPage() {
-  const session = await getSession();
-
-  if (!session?.user?.id) {
-    redirect('/login');
-  }
-
-  const now = new Date();
-  const weekStart = startOfWeek(now, { weekStartsOn: 1 });
-  const monthStart = startOfMonth(now);
-
-  const weeklyData = await getWeeklyStats();
-  const monthlyData = await getMonthlyStats();
-
-  if (!weeklyData || !monthlyData) {
-    return (
-      <div className="space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-800">통계</h1>
-          <p className="text-gray-600 mt-1">운동 기록을 분석해보세요.</p>
-        </div>
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-red-700">통계 데이터를 불러올 수 없습니다.</p>
-        </div>
-      </div>
-    );
-  }
-
-  const weekChartData = weeklyData.dailyStats.map((stat) => ({
-    date: stat.date,
-    displayDate: stat.displayDate,
-    value: stat.count,
-  }));
-
-  const weekMinutesData = weeklyData.dailyStats.map((stat) => ({
-    date: stat.date,
-    displayDate: stat.displayDate,
-    value: stat.minutes,
-  }));
-
-  const monthChartData = monthlyData.dailyStats.map((stat) => ({
-    date: stat.date,
-    displayDate: stat.displayDate,
-    value: stat.count,
-  }));
-
-  const monthMinutesData = monthlyData.dailyStats.map((stat) => ({
-    date: stat.date,
-    displayDate: stat.displayDate,
-    value: stat.minutes,
-  }));
-
-  const weekFormatted = `${format(new Date(weeklyData.weekStart), 'd', { locale: ko })}월 ${format(new Date(weeklyData.weekStart), 'd', { locale: ko })}일 - ${format(new Date(weeklyData.weekEnd), 'd', { locale: ko })}일`;
-
-  const monthFormatted = format(new Date(monthlyData.monthStart), 'M월', {
-    locale: ko,
-  });
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-800">통계</h1>
-          <p className="text-gray-600 mt-1">운동 기록을 분석해보세요.</p>
-        </div>
-        <Link
-          href="/exercises/new"
-          className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-medium transition-colors flex items-center gap-2"
-        >
-          <svg
-            className="w-5 h-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 4v16m8-8H4"
-            />
-          </svg>
-          운동 추가
-        </Link>
+    <div className="space-y-10">
+      <div>
+        <h1 className="text-4xl font-bold tracking-tight" style={{ color: 'var(--foreground)' }}>
+          통계
+        </h1>
+        <p className="text-base mt-3" style={{ color: 'var(--text-secondary)' }}>
+          운동 기록 통계를 확인하세요
+        </p>
       </div>
 
-      {/* Weekly Section */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-800">주간 통계</h2>
-            <p className="text-gray-600 text-sm mt-1">{weekFormatted}</p>
-          </div>
-        </div>
-
-        {/* Weekly Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500">
-            <h3 className="text-sm font-semibold text-gray-600 mb-2">총 운동</h3>
-            <div className="text-3xl font-bold text-gray-800">
-              {weeklyData.weeklyStats.totalExercises}
+      <div
+        className="rounded-2xl p-8 border"
+        style={{
+          backgroundColor: 'white',
+          borderColor: 'var(--border)',
+          boxShadow: 'var(--shadow-md)'
+        }}
+      >
+        <h2 className="text-xl font-bold mb-6 tracking-tight" style={{ color: 'var(--foreground)' }}>
+          주간 통계
+        </h2>
+        {data.weeklyStats.length > 0 ? (
+          <div className="space-y-6">
+            <div className="p-4 rounded-xl" style={{ backgroundColor: 'var(--gray-50)', border: '1px solid var(--border)' }}>
+              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                <span className="font-semibold" style={{ color: 'var(--foreground)' }}>주간 목표:</span> {data.weeklyGoal}회 / {data.weeklyMinutesGoal}분
+              </p>
             </div>
-            <p className="text-sm text-gray-600 mt-2">
-              {weeklyData.weeklyStats.totalMinutes}분
-            </p>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500">
-            <h3 className="text-sm font-semibold text-gray-600 mb-2">
-              운동 일수
-            </h3>
-            <div className="text-3xl font-bold text-gray-800">
-              {weeklyData.weeklyGoal.completed}/{weeklyData.weeklyGoal.target}
-            </div>
-            <p className="text-sm text-gray-600 mt-2">
-              {weeklyData.achievementPercentage}% 달성
-            </p>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-purple-500">
-            <h3 className="text-sm font-semibold text-gray-600 mb-2">
-              목표 시간
-            </h3>
-            <div className="text-3xl font-bold text-gray-800">
-              {weeklyData.weeklyGoal.completedMinutes}/
-              {weeklyData.weeklyGoal.targetMinutes}분
-            </div>
-            <p className="text-sm text-gray-600 mt-2">
-              {weeklyData.weeklyGoal.targetMinutes > 0
-                ? Math.round(
-                    (weeklyData.weeklyGoal.completedMinutes /
-                      weeklyData.weeklyGoal.targetMinutes) *
-                      100
-                  )
-                : 0}
-              % 달성
-            </p>
-          </div>
-        </div>
-
-        {/* Weekly Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <StatisticsChart
-            title="주간 운동 횟수"
-            data={weekChartData}
-            type="bar"
-            metric="횟수"
-          />
-          <StatisticsChart
-            title="주간 운동 시간"
-            data={weekMinutesData}
-            type="line"
-            metric="분"
-            unit="분"
-          />
-        </div>
-
-        {/* Weekly Goal Progress */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h3 className="text-lg font-bold text-gray-800 mb-4">
-            주간 목표 진행 상황
-          </h3>
-          <div className="space-y-4">
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-medium text-gray-700">운동 일수</span>
-                <span className="text-sm font-semibold text-blue-600">
-                  {weeklyData.weeklyGoal.completed}/{weeklyData.weeklyGoal.target}일
-                </span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-3">
-                <div
-                  className="bg-blue-500 h-3 rounded-full transition-all"
-                  style={{
-                    width: `${Math.min((weeklyData.weeklyGoal.completed / weeklyData.weeklyGoal.target) * 100, 100)}%`,
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={data.weeklyStats}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={(date) => new Date(date).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
+                  stroke="#6b7280"
+                />
+                <YAxis stroke="#10b981" label={{ value: '운동 시간 (분)', angle: -90, position: 'insideLeft' }} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
                   }}
-                ></div>
-              </div>
-            </div>
-
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-medium text-gray-700">
-                  운동 시간
-                </span>
-                <span className="text-sm font-semibold text-green-600">
-                  {weeklyData.weeklyGoal.completedMinutes}/
-                  {weeklyData.weeklyGoal.targetMinutes}분
-                </span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-3">
-                <div
-                  className="bg-green-500 h-3 rounded-full transition-all"
-                  style={{
-                    width: `${Math.min((weeklyData.weeklyGoal.completedMinutes / weeklyData.weeklyGoal.targetMinutes) * 100, 100)}%`,
+                  formatter={(value, name) => {
+                    if (name === 'minutes') return [value, '운동 시간(분)'];
+                    return [value, name];
                   }}
-                ></div>
-              </div>
-            </div>
+                  labelFormatter={(label) => new Date(label).toLocaleDateString('ko-KR')}
+                />
+                <Bar dataKey="minutes" fill="#10b981" name="운동 시간(분)" radius={[8, 8, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
-        </div>
+        ) : (
+          <div className="text-center py-16">
+            <p className="text-lg mb-4" style={{ color: 'var(--text-secondary)' }}>
+              주간 운동 데이터가 없습니다
+            </p>
+            <p className="text-sm mb-6" style={{ color: 'var(--text-tertiary)' }}>
+              운동을 추가하면 통계가 표시됩니다
+            </p>
+            <a
+              href="/exercises/new"
+              className="inline-block px-6 py-2 rounded-lg font-semibold text-sm transition-all"
+              style={{
+                backgroundColor: 'var(--primary)',
+                color: 'white'
+              }}
+            >
+              첫 운동 추가하기
+            </a>
+          </div>
+        )}
       </div>
 
-      {/* Monthly Section */}
-      <div className="space-y-4 border-t border-gray-200 pt-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-800">월간 통계</h2>
-            <p className="text-gray-600 text-sm mt-1">{monthFormatted}</p>
-          </div>
-        </div>
+      <div
+        className="rounded-2xl p-8 border"
+        style={{
+          backgroundColor: 'white',
+          borderColor: 'var(--border)',
+          boxShadow: 'var(--shadow-md)'
+        }}
+      >
+        <h2 className="text-xl font-bold mb-6 tracking-tight" style={{ color: 'var(--foreground)' }}>
+          월간 통계
+        </h2>
+        {data.monthlyStats.length > 0 ? (
+          <div className="space-y-6">
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={data.monthlyStats}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={(date) => {
+                    const day = new Date(date).getDate();
+                    // 1일, 11일, 21일만 표시
+                    if (day === 1 || day === 11 || day === 21) {
+                      return day + '일';
+                    }
+                    return '';
+                  }}
+                  stroke="#6b7280"
+                  tick={{ fontSize: 12 }}
+                />
+                <YAxis stroke="#f59e0b" label={{ value: '운동 시간 (분)', angle: -90, position: 'insideLeft' }} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                  }}
+                  formatter={(value, name) => {
+                    if (name === 'minutes') return [value, '운동 시간(분)'];
+                    if (name === 'count') return [value, '운동 횟수'];
+                    return [value, name];
+                  }}
+                  labelFormatter={(label) => `${new Date(label).getDate()}일`}
+                />
+                <Bar dataKey="minutes" fill="#f59e0b" name="운동 시간(분)" radius={[8, 8, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
 
-        {/* Monthly Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500">
-            <h3 className="text-sm font-semibold text-gray-600 mb-2">총 운동</h3>
-            <div className="text-3xl font-bold text-gray-800">
-              {monthlyData.monthlyStats.totalExercises}
-            </div>
-            <p className="text-sm text-gray-600 mt-2">
-              {monthlyData.monthlyStats.totalMinutes}분
-            </p>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500">
-            <h3 className="text-sm font-semibold text-gray-600 mb-2">
-              운동 일수
-            </h3>
-            <div className="text-3xl font-bold text-gray-800">
-              {monthlyData.monthlyStats.daysWithExercises}
-            </div>
-            <p className="text-sm text-gray-600 mt-2">
-              {monthlyData.achievementPercentage > 0
-                ? monthlyData.achievementPercentage
-                : 0}
-              % 달성
-            </p>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-purple-500">
-            <h3 className="text-sm font-semibold text-gray-600 mb-2">
-              총 시간
-            </h3>
-            <div className="text-3xl font-bold text-gray-800">
-              {monthlyData.monthlyStats.totalMinutes}분
-            </div>
-            <p className="text-sm text-gray-600 mt-2">
-              {Math.round(monthlyData.monthlyStats.totalMinutes / 60)}시간{' '}
-              {monthlyData.monthlyStats.totalMinutes % 60}분
-            </p>
-          </div>
-        </div>
-
-        {/* Monthly Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <StatisticsChart
-            title="월간 운동 횟수"
-            data={monthChartData}
-            type="bar"
-            metric="횟수"
-          />
-          <StatisticsChart
-            title="월간 운동 시간"
-            data={monthMinutesData}
-            type="line"
-            metric="분"
-            unit="분"
-          />
-        </div>
-
-        {/* Monthly Goal Progress */}
-        {monthlyData.monthlyGoal && (
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">
-              월간 목표 진행 상황
-            </h3>
-            <div className="space-y-4">
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm font-medium text-gray-700">
-                    운동 일수
-                  </span>
-                  <span className="text-sm font-semibold text-blue-600">
-                    {monthlyData.monthlyGoal.completed}/
-                    {monthlyData.monthlyGoal.target}일
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div
-                    className="bg-blue-500 h-3 rounded-full transition-all"
-                    style={{
-                      width: `${Math.min((monthlyData.monthlyGoal.completed / monthlyData.monthlyGoal.target) * 100, 100)}%`,
-                    }}
-                  ></div>
-                </div>
+            <div className="grid grid-cols-2 gap-6 mt-8">
+              <div
+                className="rounded-2xl p-6 border text-center"
+                style={{
+                  backgroundColor: 'var(--gray-50)',
+                  borderColor: 'var(--border)'
+                }}
+              >
+                <p className="text-xs font-semibold tracking-wide" style={{ color: 'var(--text-secondary)' }}>
+                  총 운동 횟수
+                </p>
+                <p className="text-4xl font-bold mt-3 tracking-tight" style={{ color: 'var(--warning)' }}>
+                  {data.monthlyStats.reduce((sum, stat) => sum + stat.count, 0)}
+                </p>
+                <p className="text-xs mt-2" style={{ color: 'var(--text-tertiary)' }}>회</p>
               </div>
-
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm font-medium text-gray-700">
-                    운동 시간
-                  </span>
-                  <span className="text-sm font-semibold text-green-600">
-                    {monthlyData.monthlyGoal.completedMinutes}/
-                    {monthlyData.monthlyGoal.targetMinutes}분
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div
-                    className="bg-green-500 h-3 rounded-full transition-all"
-                    style={{
-                      width: `${Math.min((monthlyData.monthlyGoal.completedMinutes / monthlyData.monthlyGoal.targetMinutes) * 100, 100)}%`,
-                    }}
-                  ></div>
-                </div>
+              <div
+                className="rounded-2xl p-6 border text-center"
+                style={{
+                  backgroundColor: 'var(--gray-50)',
+                  borderColor: 'var(--border)'
+                }}
+              >
+                <p className="text-xs font-semibold tracking-wide" style={{ color: 'var(--text-secondary)' }}>
+                  총 운동 시간
+                </p>
+                <p className="text-4xl font-bold mt-3 tracking-tight" style={{ color: 'var(--success)' }}>
+                  {data.monthlyStats.reduce((sum, stat) => sum + stat.minutes, 0)}
+                </p>
+                <p className="text-xs mt-2" style={{ color: 'var(--text-tertiary)' }}>분</p>
               </div>
             </div>
+          </div>
+        ) : (
+          <div className="text-center py-16">
+            <p className="text-lg mb-4" style={{ color: 'var(--text-secondary)' }}>
+              월간 운동 데이터가 없습니다
+            </p>
+            <p className="text-sm mb-6" style={{ color: 'var(--text-tertiary)' }}>
+              운동을 추가하면 통계가 표시됩니다
+            </p>
+            <a
+              href="/exercises/new"
+              className="inline-block px-6 py-2 rounded-lg font-semibold text-sm transition-all"
+              style={{
+                backgroundColor: 'var(--primary)',
+                color: 'white'
+              }}
+            >
+              첫 운동 추가하기
+            </a>
           </div>
         )}
       </div>

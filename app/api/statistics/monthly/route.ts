@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
         (ex) => format(ex.date, 'yyyy-MM-dd') === dateStr
       );
 
-      const count = dayExercises.length;
+      const count = dayExercises.length > 0 ? 1 : 0;
       const minutes = dayExercises.reduce((sum, ex) => sum + ex.duration, 0);
 
       return {

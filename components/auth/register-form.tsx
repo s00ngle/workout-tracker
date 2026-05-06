@@ -42,7 +42,6 @@ export default function RegisterForm() {
   const watchPassword = watch('password');
   const watchNickname = watch('nickname');
 
-  // 닉네임 가용성 확인
   const checkNicknameAvailability = async () => {
     if (!watchNickname) {
       setError('닉네임을 입력해주세요');
@@ -83,28 +82,23 @@ export default function RegisterForm() {
     }
   };
 
-  // Step 1: 정보 입력 단계
   const onSubmitInfo = async (data: RegisterFormData) => {
     setError(null);
     setSuccess(null);
 
-    // 닉네임 가용성 확인
     if (!nicknameAvailable) {
       setError('닉네임 가용성을 확인해주세요');
       return;
     }
 
-    // 비밀번호 확인
     if (data.password !== data.passwordConfirm) {
       setError('비밀번호가 일치하지 않습니다');
       return;
     }
 
-    // Step 2로 진행
     setStep('goals');
   };
 
-  // Step 2: 목표 설정 및 회원가입
   const onSubmitGoals = async (data: RegisterFormData) => {
     setError(null);
     setSuccess(null);
@@ -133,7 +127,6 @@ export default function RegisterForm() {
         setNicknameAvailable(null);
         setStep('info');
 
-        // 2초 후 로그인 페이지로 이동
         setTimeout(() => {
           router.push('/login?success=registered');
         }, 2000);
@@ -150,31 +143,53 @@ export default function RegisterForm() {
   const handleSubmitForm = handleSubmit(step === 'info' ? onSubmitInfo : onSubmitGoals);
 
   return (
-    <div className="bg-white rounded-lg shadow-lg p-8">
-      <h1 className="text-2xl font-bold text-gray-800 mb-6 text-center">
-        {step === 'info' ? '회원가입' : '운동 목표 설정'}
-      </h1>
+    <div
+      className="rounded-3xl p-12 max-w-md mx-auto bg-white"
+      style={{
+        boxShadow: 'var(--shadow-lg)',
+        border: '1px solid var(--border)'
+      }}
+    >
+      <div className="mb-10">
+        <h1 className="text-4xl font-bold mb-2" style={{ color: 'var(--foreground)' }}>
+          {step === 'info' ? '회원가입' : '목표 설정'}
+        </h1>
+        <p className="text-base" style={{ color: 'var(--text-secondary)' }}>
+          {step === 'info' ? '새로운 계정을 생성하세요' : '운동 목표를 설정하세요'}
+        </p>
+      </div>
 
-      {/* 에러 메시지 */}
       {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md">
-          <p className="text-red-700 text-sm">{error}</p>
+        <div
+          className="mb-6 p-4 rounded-2xl text-sm font-medium"
+          style={{
+            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+            color: 'var(--error)',
+            border: '1px solid rgba(239, 68, 68, 0.2)'
+          }}
+        >
+          {error}
         </div>
       )}
 
-      {/* 성공 메시지 */}
       {success && (
-        <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-md">
-          <p className="text-green-700 text-sm">{success}</p>
+        <div
+          className="mb-6 p-4 rounded-2xl text-sm font-medium"
+          style={{
+            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+            color: 'var(--success)',
+            border: '1px solid rgba(16, 185, 129, 0.2)'
+          }}
+        >
+          {success}
         </div>
       )}
 
-      <form onSubmit={handleSubmitForm} className="space-y-4">
+      <form onSubmit={handleSubmitForm} className="space-y-5">
         {step === 'info' ? (
           <>
-            {/* 이메일 입력 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-semibold mb-2.5" style={{ color: 'var(--text-primary)' }}>
                 이메일
               </label>
               <input
@@ -186,17 +201,22 @@ export default function RegisterForm() {
                     message: '올바른 이메일 형식을 입력해주세요',
                   },
                 })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 transition-all"
+                style={{
+                  borderColor: 'var(--border)',
+                  backgroundColor: 'var(--gray-50)'
+                }}
                 placeholder="your@email.com"
               />
               {errors.email && (
-                <p className="text-red-500 text-sm mt-1">{errors.email.message}</p>
+                <p className="text-sm mt-2" style={{ color: 'var(--error)' }}>
+                  {errors.email.message}
+                </p>
               )}
             </div>
 
-            {/* 닉네임 입력 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-semibold mb-2.5" style={{ color: 'var(--text-primary)' }}>
                 닉네임
               </label>
               <div className="flex gap-2">
@@ -217,32 +237,45 @@ export default function RegisterForm() {
                       message: '영문, 숫자, _, 한글만 포함 가능합니다',
                     },
                   })}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                  className="flex-1 px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 transition-all"
+                  style={{
+                    borderColor: 'var(--border)',
+                    backgroundColor: 'var(--gray-50)'
+                  }}
                   placeholder="your_nickname"
                 />
                 <button
                   type="button"
                   onClick={checkNicknameAvailability}
                   disabled={nicknameCheckLoading || !watchNickname}
-                  className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                  className="px-4 py-3 rounded-xl font-semibold text-sm transition-all hover:shadow-md disabled:opacity-50"
+                  style={{
+                    backgroundColor: 'var(--primary)',
+                    color: 'white'
+                  }}
                 >
                   {nicknameCheckLoading ? '확인 중...' : '확인'}
                 </button>
               </div>
               {errors.nickname && (
-                <p className="text-red-500 text-sm mt-1">{errors.nickname.message}</p>
+                <p className="text-sm mt-2" style={{ color: 'var(--error)' }}>
+                  {errors.nickname.message}
+                </p>
               )}
               {nicknameAvailable === true && (
-                <p className="text-green-500 text-sm mt-1">사용 가능한 닉네임입니다</p>
+                <p className="text-sm mt-2" style={{ color: 'var(--success)' }}>
+                  사용 가능한 닉네임입니다
+                </p>
               )}
               {nicknameAvailable === false && (
-                <p className="text-red-500 text-sm mt-1">사용할 수 없는 닉네임입니다</p>
+                <p className="text-sm mt-2" style={{ color: 'var(--error)' }}>
+                  사용할 수 없는 닉네임입니다
+                </p>
               )}
             </div>
 
-            {/* 비밀번호 입력 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-semibold mb-2.5" style={{ color: 'var(--text-primary)' }}>
                 비밀번호
               </label>
               <input
@@ -258,20 +291,25 @@ export default function RegisterForm() {
                     message: '대문자와 숫자를 포함해야 합니다',
                   },
                 })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 transition-all"
+                style={{
+                  borderColor: 'var(--border)',
+                  backgroundColor: 'var(--gray-50)'
+                }}
                 placeholder="Password123"
               />
               {errors.password && (
-                <p className="text-red-500 text-sm mt-1">{errors.password.message}</p>
+                <p className="text-sm mt-2" style={{ color: 'var(--error)' }}>
+                  {errors.password.message}
+                </p>
               )}
-              <p className="text-gray-500 text-xs mt-1">
+              <p className="text-xs mt-2" style={{ color: 'var(--text-tertiary)' }}>
                 최소 8자, 대문자 1개, 숫자 1개 포함
               </p>
             </div>
 
-            {/* 비밀번호 확인 입력 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-semibold mb-2.5" style={{ color: 'var(--text-primary)' }}>
                 비밀번호 확인
               </label>
               <input
@@ -281,38 +319,50 @@ export default function RegisterForm() {
                   validate: (value) =>
                     value === watchPassword || '비밀번호가 일치하지 않습니다',
                 })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 transition-all"
+                style={{
+                  borderColor: 'var(--border)',
+                  backgroundColor: 'var(--gray-50)'
+                }}
                 placeholder="Password123"
               />
               {errors.passwordConfirm && (
-                <p className="text-red-500 text-sm mt-1">{errors.passwordConfirm.message}</p>
+                <p className="text-sm mt-2" style={{ color: 'var(--error)' }}>
+                  {errors.passwordConfirm.message}
+                </p>
               )}
             </div>
 
-            {/* 다음 버튼 */}
             <button
               type="submit"
               disabled={isLoading || nicknameAvailable !== true}
-              className="w-full py-2 bg-blue-500 text-white font-semibold rounded-md hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors mt-6"
+              className="w-full py-3.5 text-white font-semibold rounded-xl transition-all duration-200 hover:shadow-lg active:scale-95 disabled:opacity-60 mt-8"
+              style={{
+                backgroundColor: 'var(--primary)'
+              }}
             >
               다음
             </button>
           </>
         ) : (
           <>
-            {/* Step 2: 목표 설정 */}
-            <div className="bg-gray-50 p-4 rounded-md mb-4">
-              <p className="text-sm text-gray-600 mb-4">
+            <div
+              className="p-4 rounded-xl"
+              style={{
+                backgroundColor: 'var(--gray-50)',
+                border: '1px solid var(--border)'
+              }}
+            >
+              <p className="text-sm mb-3" style={{ color: 'var(--text-secondary)' }}>
                 📧 {watch('email')}
               </p>
-              <p className="text-sm text-gray-600 mb-4">
+              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
                 👤 {watch('nickname')}
               </p>
             </div>
 
-            {/* 주간 목표 (운동 횟수) */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-semibold mb-2.5" style={{ color: 'var(--text-primary)' }}>
                 주간 운동 목표 횟수
               </label>
               <input
@@ -324,17 +374,22 @@ export default function RegisterForm() {
                     message: '최소 1회 이상이어야 합니다',
                   },
                 })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 transition-all"
+                style={{
+                  borderColor: 'var(--border)',
+                  backgroundColor: 'var(--gray-50)'
+                }}
                 min="1"
               />
               {errors.weeklyTarget && (
-                <p className="text-red-500 text-sm mt-1">{errors.weeklyTarget.message}</p>
+                <p className="text-sm mt-2" style={{ color: 'var(--error)' }}>
+                  {errors.weeklyTarget.message}
+                </p>
               )}
             </div>
 
-            {/* 주간 목표 (운동 시간) */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-semibold mb-2.5" style={{ color: 'var(--text-primary)' }}>
                 주간 운동 목표 시간 (분)
               </label>
               <input
@@ -346,28 +401,40 @@ export default function RegisterForm() {
                     message: '최소 10분 이상이어야 합니다',
                   },
                 })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 transition-all"
+                style={{
+                  borderColor: 'var(--border)',
+                  backgroundColor: 'var(--gray-50)'
+                }}
                 min="10"
               />
               {errors.weeklyMinutes && (
-                <p className="text-red-500 text-sm mt-1">{errors.weeklyMinutes.message}</p>
+                <p className="text-sm mt-2" style={{ color: 'var(--error)' }}>
+                  {errors.weeklyMinutes.message}
+                </p>
               )}
             </div>
 
-            {/* 버튼 그룹 */}
-            <div className="flex gap-3 mt-6">
+            <div className="flex gap-3 mt-8">
               <button
                 type="button"
                 onClick={() => setStep('info')}
                 disabled={isLoading}
-                className="flex-1 py-2 bg-gray-300 text-gray-700 font-semibold rounded-md hover:bg-gray-400 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                className="flex-1 py-3.5 rounded-xl font-semibold transition-all duration-200 hover:shadow-md disabled:opacity-50"
+                style={{
+                  backgroundColor: 'var(--gray-200)',
+                  color: 'var(--text-primary)'
+                }}
               >
                 이전
               </button>
               <button
                 type="submit"
                 disabled={isLoading}
-                className="flex-1 py-2 bg-blue-500 text-white font-semibold rounded-md hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                className="flex-1 py-3.5 text-white font-semibold rounded-xl transition-all duration-200 hover:shadow-lg active:scale-95 disabled:opacity-60"
+                style={{
+                  backgroundColor: 'var(--primary)'
+                }}
               >
                 {isLoading ? '가입 중...' : '가입 완료'}
               </button>
@@ -376,11 +443,10 @@ export default function RegisterForm() {
         )}
       </form>
 
-      {/* 로그인 링크 */}
       {step === 'info' && (
-        <p className="text-center text-sm text-gray-600 mt-6">
+        <p className="text-center text-sm mt-8" style={{ color: 'var(--text-secondary)' }}>
           이미 계정이 있으신가요?{' '}
-          <a href="/login" className="text-blue-500 hover:text-blue-600 font-semibold">
+          <a href="/login" className="font-semibold transition-opacity hover:opacity-70" style={{ color: 'var(--primary)' }}>
             로그인
           </a>
         </p>

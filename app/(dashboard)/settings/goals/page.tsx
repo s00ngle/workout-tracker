@@ -1,239 +1,317 @@
-import { getSession } from 'next-auth/react';
-import { redirect } from 'next/navigation';
-import { db } from '@/lib/db';
-import { GoalForm } from '@/components/goal-form';
-import {
-  startOfWeek,
-  endOfWeek,
-  startOfMonth,
-  endOfMonth,
-  parseISO,
-  format,
-} from 'date-fns';
-import Link from 'next/link';
+'use client';
 
-export const dynamic = 'force-dynamic';
+import { useEffect, useState } from 'react';
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import { useForm } from 'react-hook-form';
 
-interface Exercise {
-  id: number;
-  date: Date | string;
-  type: string;
-  duration: number;
-  intensity: string;
-  userId: number;
-  createdAt: Date;
-  updatedAt: Date;
+interface Goal {
+  weeklyTarget: number;
+  weeklyMinutes: number;
+  monthlyTarget?: number;
+  monthlyMinutes?: number;
 }
 
-async function getGoalData(userId: number) {
-  const now = new Date();
-  const weekStart = startOfWeek(now);
-  const weekEnd = endOfWeek(now);
-  const monthStart = startOfMonth(now);
-  const monthEnd = endOfMonth(now);
+interface FormData {
+  weeklyTarget: number;
+  weeklyMinutes: number;
+  monthlyTarget?: number | null;
+  monthlyMinutes?: number | null;
+}
 
-  // Fetch user's goal
-  const goal = await db.goal.findUnique({
-    where: { userId },
-  });
+export default function GoalsPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const [goal, setGoal] = useState<Goal | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Fetch this week's exercises
-  const weekExercises = await db.exercise.findMany({
-    where: {
-      userId,
-      date: {
-        gte: weekStart,
-        lte: weekEnd,
-      },
-    },
-    orderBy: {
-      date: 'desc',
-    },
-  });
-
-  // Fetch this month's exercises
-  const monthExercises = await db.exercise.findMany({
-    where: {
-      userId,
-      date: {
-        gte: monthStart,
-        lte: monthEnd,
-      },
-    },
-    orderBy: {
-      date: 'desc',
-    },
-  });
-
-  return {
-    goal,
-    weekExercises,
-    monthExercises,
+  const getDaysInMonth = () => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   };
-}
 
-function calculateStats(exercises: Exercise[]) {
-  const uniqueDays = new Set(
-    exercises.map((ex) => {
-      const date = typeof ex.date === 'string' ? parseISO(ex.date) : ex.date;
-      return format(date, 'yyyy-MM-dd');
-    })
-  ).size;
+  const { register, handleSubmit, watch, reset } = useForm<FormData>();
 
-  const totalMinutes = exercises.reduce((sum, ex) => sum + ex.duration, 0);
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/login');
+      return;
+    }
 
-  return {
-    uniqueDays,
-    totalMinutes,
+    if (status !== 'authenticated') return;
+
+    const fetchGoal = async () => {
+      try {
+        const res = await fetch('/api/goals');
+        if (res.ok) {
+          const goalData = await res.json();
+          if (goalData) {
+            setGoal(goalData);
+            reset({
+              weeklyTarget: goalData.weeklyTarget,
+              weeklyMinutes: goalData.weeklyMinutes,
+              monthlyTarget: goalData.monthlyTarget || null,
+              monthlyMinutes: goalData.monthlyMinutes || null,
+            });
+          }
+        }
+      } catch (err) {
+        console.error('목표 조회 실패:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchGoal();
+  }, [status, router, reset]);
+
+  const onSubmit = async (data: FormData) => {
+    setSubmitting(true);
+    setMessage(null);
+
+    try {
+      // 빈 필드를 null로 변환
+      const submitData = {
+        weeklyTarget: data.weeklyTarget,
+        weeklyMinutes: data.weeklyMinutes,
+        monthlyTarget: data.monthlyTarget || null,
+        monthlyMinutes: data.monthlyMinutes || null,
+      };
+
+      const res = await fetch('/api/goals', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(submitData),
+      });
+
+      const responseData = await res.json();
+
+      if (res.ok) {
+        setGoal(responseData);
+        setMessage({ type: 'success', text: '목표가 저장되었습니다' });
+      } else {
+        setMessage({ type: 'error', text: responseData.message || '목표 저장에 실패했습니다' });
+      }
+    } catch (err) {
+      setMessage({ type: 'error', text: '목표 저장 중 오류가 발생했습니다' });
+      console.error('목표 저장 실패:', err);
+    } finally {
+      setSubmitting(false);
+    }
   };
-}
 
-export default async function GoalSettingsPage() {
-  const session = await getSession();
-
-  if (!session?.user?.id) {
-    redirect('/login');
+  if (loading) {
+    return <div className="p-6">로딩 중...</div>;
   }
 
-  const userId = parseInt(session.user.id);
-  const { goal, weekExercises, monthExercises } = await getGoalData(userId);
-
-  const weekStats = calculateStats(weekExercises);
-  const monthStats = calculateStats(monthExercises);
-
-  const defaultGoal = {
-    weeklyTarget: 3,
-    weeklyMinutes: 30,
-    monthlyTarget: null,
-    monthlyMinutes: null,
-  };
-
-  const currentGoal = goal || defaultGoal;
-
-  const currentStats = {
-    weeklyDays: weekStats.uniqueDays,
-    weeklyMinutes: weekStats.totalMinutes,
-    monthlyDays: monthStats.uniqueDays,
-    monthlyMinutes: monthStats.totalMinutes,
-  };
+  if (!session) {
+    return null;
+  }
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-800">목표 설정</h1>
-          <p className="text-gray-600 mt-1">운동 목표를 설정하고 진행 상황을 추적하세요.</p>
-        </div>
+    <div className="space-y-10">
+      <div className="max-w-3xl mx-auto">
+        <h1 className="text-5xl font-bold mb-3" style={{ color: 'var(--foreground)' }}>
+          운동 목표 설정
+        </h1>
+        <p className="text-lg" style={{ color: 'var(--text-secondary)' }}>
+          주간과 월간 목표를 설정해 운동 습관을 관리하세요
+        </p>
       </div>
 
-      {/* Settings Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Goal Form */}
-        <div className="lg:col-span-2 bg-white rounded-lg shadow-md p-8">
-          <GoalForm
-            initialValues={currentGoal}
-            currentStats={currentStats}
-          />
+      {message && (
+        <div
+          className="max-w-3xl mx-auto px-6 py-4 rounded-2xl text-sm font-medium"
+          style={{
+            backgroundColor:
+              message.type === 'success' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+            color: message.type === 'success' ? 'var(--success)' : 'var(--error)',
+            border: message.type === 'success' ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid rgba(239, 68, 68, 0.2)'
+          }}
+        >
+          {message.text}
         </div>
+      )}
 
-        {/* Goal Summary */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-bold text-gray-800 mb-6">목표 요약</h2>
-
-          {/* Weekly Goal */}
-          <div className="mb-8 pb-8 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-700 mb-4">주간 목표</h3>
-            <div className="space-y-3">
-              <div>
-                <p className="text-sm text-gray-600">목표 운동일</p>
-                <p className="text-2xl font-bold text-blue-600">
-                  {currentGoal.weeklyTarget}일
-                </p>
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-4xl mx-auto">
+          {/* 주간 목표 섹션 */}
+          <div
+            className="rounded-2xl p-8 border"
+            style={{
+              backgroundColor: 'white',
+              borderColor: 'var(--border)',
+              boxShadow: 'var(--shadow-md)'
+            }}
+          >
+            <div className="flex items-center gap-3 mb-8">
+              <div
+                className="w-12 h-12 rounded-xl flex items-center justify-center"
+                style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)' }}
+              >
+                <span className="text-xl">📅</span>
               </div>
               <div>
-                <p className="text-sm text-gray-600">목표 운동 시간</p>
-                <p className="text-2xl font-bold text-blue-600">
-                  {currentGoal.weeklyMinutes}분
+                <h3 className="text-xl font-bold" style={{ color: 'var(--foreground)' }}>
+                  주간 목표
+                </h3>
+                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  1주일 목표 설정
                 </p>
               </div>
-              <div className="bg-blue-50 rounded-lg p-3 mt-4">
-                <p className="text-xs text-blue-600 font-medium mb-2">이번 주 진행도</p>
-                <p className="text-sm text-gray-700">
-                  운동일: <span className="font-bold">{weekStats.uniqueDays}/{currentGoal.weeklyTarget}일</span>
-                </p>
-                <p className="text-sm text-gray-700">
-                  운동 시간: <span className="font-bold">{weekStats.totalMinutes}/{currentGoal.weeklyMinutes}분</span>
+            </div>
+
+            <div className="space-y-6">
+              <div>
+                <label className="block text-sm font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>
+                  목표 횟수
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    {...register('weeklyTarget', { valueAsNumber: true, min: 1 })}
+                    className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 transition-all text-lg"
+                    style={{
+                      borderColor: 'var(--border)',
+                      backgroundColor: 'var(--gray-50)'
+                    }}
+                    min="1"
+                  />
+                  <span className="absolute right-4 top-3 text-lg" style={{ color: 'var(--text-tertiary)' }}>회</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>
+                  목표 시간
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    {...register('weeklyMinutes', { valueAsNumber: true, min: 10 })}
+                    className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 transition-all text-lg"
+                    style={{
+                      borderColor: 'var(--border)',
+                      backgroundColor: 'var(--gray-50)'
+                    }}
+                    min="10"
+                  />
+                  <span className="absolute right-4 top-3 text-lg" style={{ color: 'var(--text-tertiary)' }}>분</span>
+                </div>
+              </div>
+
+              <div
+                className="p-4 rounded-xl text-sm"
+                style={{
+                  backgroundColor: 'rgba(59, 130, 246, 0.05)',
+                  border: '1px solid rgba(59, 130, 246, 0.2)'
+                }}
+              >
+                <p style={{ color: 'var(--primary)' }}>
+                  💡 일주일에 3회, 각 30분 이상을 추천합니다
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Monthly Goal */}
-          <div>
-            <h3 className="text-lg font-semibold text-gray-700 mb-4">월간 목표</h3>
-            {currentGoal.monthlyTarget ? (
-              <div className="space-y-3">
-                <div>
-                  <p className="text-sm text-gray-600">목표 운동일</p>
-                  <p className="text-2xl font-bold text-purple-600">
-                    {currentGoal.monthlyTarget}일
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">목표 운동 시간</p>
-                  <p className="text-2xl font-bold text-purple-600">
-                    {currentGoal.monthlyMinutes}분
-                  </p>
-                </div>
-                <div className="bg-purple-50 rounded-lg p-3 mt-4">
-                  <p className="text-xs text-purple-600 font-medium mb-2">이번 달 진행도</p>
-                  <p className="text-sm text-gray-700">
-                    운동일: <span className="font-bold">{monthStats.uniqueDays}/{currentGoal.monthlyTarget}일</span>
-                  </p>
-                  <p className="text-sm text-gray-700">
-                    운동 시간: <span className="font-bold">{monthStats.totalMinutes}/{currentGoal.monthlyMinutes}분</span>
-                  </p>
+          {/* 월간 목표 섹션 */}
+          <div
+            className="rounded-2xl p-8 border"
+            style={{
+              backgroundColor: 'white',
+              borderColor: 'var(--border)',
+              boxShadow: 'var(--shadow-md)'
+            }}
+          >
+            <div className="flex items-center gap-3 mb-8">
+              <div
+                className="w-12 h-12 rounded-xl flex items-center justify-center"
+                style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)' }}
+              >
+                <span className="text-xl">📊</span>
+              </div>
+              <div>
+                <h3 className="text-xl font-bold" style={{ color: 'var(--foreground)' }}>
+                  월간 목표
+                </h3>
+                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  선택사항
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              <div>
+                <label className="block text-sm font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>
+                  목표 횟수
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    {...register('monthlyTarget', { valueAsNumber: true })}
+                    className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 transition-all text-lg"
+                    style={{
+                      borderColor: 'var(--border)',
+                      backgroundColor: 'var(--gray-50)'
+                    }}
+                    min="1"
+                    placeholder="입력 안 함"
+                  />
+                  <span className="absolute right-4 top-3 text-lg" style={{ color: 'var(--text-tertiary)' }}>회</span>
                 </div>
               </div>
-            ) : (
-              <div className="bg-gray-50 rounded-lg p-4 text-center">
-                <p className="text-gray-600 text-sm">월간 목표가 설정되지 않았습니다</p>
-                <p className="text-gray-500 text-xs mt-2">목표 설정 폼에서 월간 목표를 추가할 수 있습니다</p>
+
+              <div>
+                <label className="block text-sm font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>
+                  목표 시간
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    {...register('monthlyMinutes', { valueAsNumber: true })}
+                    className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 transition-all text-lg"
+                    style={{
+                      borderColor: 'var(--border)',
+                      backgroundColor: 'var(--gray-50)'
+                    }}
+                    min="10"
+                    placeholder="입력 안 함"
+                  />
+                  <span className="absolute right-4 top-3 text-lg" style={{ color: 'var(--text-tertiary)' }}>분</span>
+                </div>
               </div>
-            )}
+
+              <div
+                className="p-4 rounded-xl text-sm"
+                style={{
+                  backgroundColor: 'rgba(245, 158, 11, 0.05)',
+                  border: '1px solid rgba(245, 158, 11, 0.2)'
+                }}
+              >
+                <p style={{ color: 'var(--warning)' }}>
+                  💡 더 큰 목표를 설정해 장기적인 성과를 추적하세요
+                </p>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Tips Section */}
-      <div className="bg-green-50 border border-green-200 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-green-900 mb-3">목표 설정 팁</h3>
-        <ul className="text-sm text-green-800 space-y-2">
-          <li className="flex items-start gap-2">
-            <span className="text-green-600 font-bold mt-0.5">•</span>
-            <span>현실적인 목표를 설정하세요. 작은 목표부터 시작하면 동기부여가 됩니다.</span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="text-green-600 font-bold mt-0.5">•</span>
-            <span>주간 목표는 최소 3일, 월간 목표는 선택사항입니다.</span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="text-green-600 font-bold mt-0.5">•</span>
-            <span>목표를 달성하면 대시보드에서 진행 상황을 확인할 수 있습니다.</span>
-          </li>
-        </ul>
-      </div>
-
-      {/* Navigation */}
-      <div className="flex gap-4">
-        <Link
-          href="/dashboard"
-          className="px-6 py-3 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 font-medium transition-colors"
-        >
-          돌아가기
-        </Link>
-      </div>
+        <div className="max-w-4xl mx-auto">
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full px-8 py-4 text-white font-semibold text-lg rounded-xl transition-all duration-200 hover:shadow-lg active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+            style={{
+              backgroundColor: 'var(--primary)',
+              boxShadow: 'var(--shadow-md)'
+            }}
+          >
+            {submitting ? '저장 중...' : '목표 저장'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
