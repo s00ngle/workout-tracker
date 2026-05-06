@@ -135,7 +135,7 @@ export default function RegisterForm() {
 
         // 2초 후 로그인 페이지로 이동
         setTimeout(() => {
-          router.push('/login');
+          router.push('/login?success=registered');
         }, 2000);
       } else {
         setError(responseData.message || '회원가입 중 오류가 발생했습니다');
