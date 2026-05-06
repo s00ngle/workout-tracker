@@ -1,0 +1,47 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id        Int       @id @default(autoincrement())
+  email     String    @unique
+  nickname  String    @unique
+  password  String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  exercises Exercise[]
+  goal      Goal?
+}
+
+model Goal {
+  id              Int       @id @default(autoincrement())
+  userId          Int       @unique
+  weeklyTarget    Int       @default(3)
+  weeklyMinutes   Int       @default(30)
+  monthlyTarget   Int?
+  monthlyMinutes  Int?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Exercise {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  date      DateTime
+  type      String
+  duration  Int
+  intensity String    @default("medium")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+}
