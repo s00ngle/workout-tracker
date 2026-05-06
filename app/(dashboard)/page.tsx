@@ -229,7 +229,7 @@ export default async function DashboardPage() {
             {goal ? `${goal.weeklyMinutes}분/주` : '목표를 설정하세요'}
           </div>
           <Link
-            href="/goals"
+            href="/settings/goals"
             className="text-sm text-orange-500 hover:text-orange-600 font-medium mt-3 inline-block"
           >
             목표 설정 →

@@ -57,7 +57,7 @@ export function Navbar({ user }: NavbarProps) {
               통계
             </Link>
             <Link
-              href="/goals"
+              href="/settings/goals"
               className="text-gray-700 hover:text-blue-500 font-medium transition-colors"
             >
               목표
@@ -123,7 +123,7 @@ export function Navbar({ user }: NavbarProps) {
               통계
             </Link>
             <Link
-              href="/goals"
+              href="/settings/goals"
               className="block px-4 py-2 text-gray-700 hover:bg-gray-100"
             >
               목표
