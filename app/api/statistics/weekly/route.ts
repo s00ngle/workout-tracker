@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
     const weekEnd = endOfWeek(referenceDate, { weekStartsOn: 1 }); // Sunday
 
     // Fetch exercises for the week
-    const exercises = await db.exercise.findMany({
+    const exercises: { date: Date; duration: number }[] = await db.exercise.findMany({
       where: {
         userId,
         date: {

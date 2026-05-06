@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
     const monthEnd = endOfMonth(referenceDate);
 
     // Fetch exercises for the month
-    const exercises = await db.exercise.findMany({
+    const exercises: { date: Date; duration: number }[] = await db.exercise.findMany({
       where: {
         userId,
         date: {

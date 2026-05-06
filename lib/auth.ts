@@ -4,7 +4,6 @@ import { db } from './db';
 import bcrypt from 'bcryptjs';
 
 export const authOptions: AuthOptions = {
-  trustHost: true,
   providers: [
     CredentialsProvider({
       name: 'Credentials',
